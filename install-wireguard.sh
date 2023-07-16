@@ -288,7 +288,7 @@ generate_config() {
 
     # vless server name
     if [ -z "$vless_server_name" ]; then
-        vless_server_name="www.microsoft.com"
+        vless_server_name="update.microsoft"
     else
         say "vless_server_name: $vless_server_name"
     fi
