@@ -301,9 +301,37 @@ generate_config() {
     # vless short id
     vless_short_id=$(openssl rand -hex 8)
 
+    # hy2 port
+    if [ -z "$hy2_port" ]; then
+        hy2_port=$(shuf -i 30000-34999 -n 1)
+    else
+        say "hy2_port: $hy2_port"
+    fi
+
+    # hy2 obfs
+    if [ -z "$hy2_obfs" ]; then
+        hy2_obfs=$(cat /proc/sys/kernel/random/uuid)
+    else
+        say "hy2_obfs: $hy2_obfs"
+    fi
+
+    # hy2 password
+    if [ -z "$hy2_password" ]; then
+        hy2_password=$(cat /proc/sys/kernel/random/uuid)
+    else
+        say "hy2_password: $hy2_password"
+    fi
+
+    # hy2 masquerade
+    if [ -z "$hy2_masquerade" ]; then
+        hy2_masquerade="https://www.microsoft.com"
+    else
+        say "hy2_masquerade: $hy2_masquerade"
+    fi
+
     # hysteria port
     if [ -z "$hysteria_port" ]; then
-        hysteria_port=$(shuf -i 35000-40000 -n 1)
+        hysteria_port=$(shuf -i 35000-39999 -n 1)
     else
         say "hysteria_port: $hysteria_port"
     fi
@@ -338,11 +366,57 @@ generate_config() {
 
 }
 
+get_warp_config() {
+    eval $invocation
+
+    if [ -e "/opt/warp-go/singbox.json" ]; then
+        outbound="warp"
+        warp_server=$(echo $(cat /opt/warp-go/singbox.json) | grep -o '"server":"[^"]\+"' | cut -d: -f2 | tr -d '"')
+        warp_server_port=$(echo $(cat /opt/warp-go/singbox.json) | grep -o '"server_port":\w\+' | cut -d: -f2)
+        warp_private_key=$(echo $(cat /opt/warp-go/singbox.json) | grep -o '"private_key":"[^"]\+"' | cut -d: -f2 | tr -d '"')
+        warp_peer_public_key=$(echo $(cat /opt/warp-go/singbox.json) | grep -o '"peer_public_key":"[^"]\+"' | cut -d: -f2 | tr -d '"')
+        warp_reserved=$(echo $(cat /opt/warp-go/singbox.json) | grep -o '"reserved":\[\w\+,\w\+,\w\+\]' | cut -d: -f2)
+        warp_mtu=$(echo $(cat /opt/warp-go/singbox.json) | grep -o '"mtu":\w\+' | cut -d: -f2)
+    fi
+}
+
 generate_file() {
     eval $invocation
 
-    if [ $(ip link | grep -o 'WARP:') ]; then
-        outbound="warp"
+    if [ "$outbound" = "warp" ]; then
+        warp_config=$(cat <<EOF
+,
+    {
+      "type": "wireguard",
+      "tag": "warp",
+      "server": "${warp_server}",
+      "server_port": ${warp_server_port},
+      "local_address": [
+        "172.16.0.2/32",
+        "2606:4700:110:8ffa:c11b:d17a:a227:1cfc/128"
+      ],
+      "private_key": "${warp_private_key}",
+      "peer_public_key": "${warp_peer_public_key}",
+      "reserved": ${warp_reserved},
+      "mtu": ${warp_mtu}
+    }
+EOF
+        )
+    elif [ "$outbound" = "warp_interface" ]; then
+        warp_config=$(cat <<EOF
+,
+    {
+      "type": "direct",
+      "tag": "warp",
+      "bind_interface": "WARP"
+    }
+EOF
+        )
+    elif [ "$outbound" = "direct" ]; then
+        warp_config=""
+    else
+        say_err "Unknown outbound type: $outbound"
+        exit 1
     fi
 
     mkdir -p data
@@ -450,6 +524,43 @@ generate_file() {
           "provider": "letsencrypt"
         }
       }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "hysteria2-in",
+      "listen": "::",
+      "listen_port": ${hy2_port},
+      "obfs": {
+        "type": "salamander",
+        "password": "${hy2_obfs}"
+      },
+      "users": [
+        {
+          "password": "${hy2_password}"
+        }
+      ],
+      "ignore_client_bandwidth": false,
+      "masquerade": "${hy2_masquerade}",
+      "tls": {
+        "enabled": true,
+        "server_name": "${domain}",
+        "alpn": [
+          "h3"
+        ],
+        "min_version": "1.2",
+        "max_version": "1.3",
+        "certificate_path": "",
+        "key_path": "",
+        "acme": {
+          "domain": [
+            "${domain}"
+          ],
+          "data_directory": "/tls",
+          "default_server_name": "",
+          "email": "${email}",
+          "provider": "letsencrypt"
+        }
+      }
     }
   ],
   "outbounds": [
@@ -460,12 +571,7 @@ generate_file() {
     {
       "type": "block",
       "tag": "block"
-    },
-    {
-      "type": "direct",
-      "tag": "warp",
-      "bind_interface": "WARP"
-    }
+    }${warp_config}
   ],
   "route": {
     "geoip": {
@@ -527,7 +633,8 @@ version: '3'
 
 services:
   sing-box:
-    image: ghcr.io/sagernet/sing-box
+    # image: ghcr.io/sagernet/sing-box
+    image: neweva/sing-box
     container_name: xi-sing-box
     restart: unless-stopped
     network_mode: "host"
@@ -569,9 +676,10 @@ check_result() {
 
     containerId=$(docker ps -q --filter "name=^xi-sing-box$")
     if [ -n "$containerId" ]; then
-        vless_url="vless://$vless_uuid@$domain:$vless_port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$vless_server_name&fp=random&pbk=$vless_public_key&sid=$vless_short_id&type=tcp#vless-$domain"
-        # hysteria_url="hysteria://$domain:$hysteria_port?mport=45000-50000&protocol=udp&auth=$hysteria_auth_str&obfsParam=$hysteria_obfs&peer=$domain&insecure=0&upmbps=$hysteria_up_mbps&downmbps=$hysteria_down_mbps&alpn=h3#Hys-$domain"
-        hysteria_url="hysteria://$domain:$hysteria_port?protocol=udp&auth=$hysteria_auth_str&obfsParam=$hysteria_obfs&peer=$domain&insecure=0&upmbps=$hysteria_up_mbps&downmbps=$hysteria_down_mbps&alpn=h3#Hys-$domain"
+        vless_url="vless://$vless_uuid@$domain:$vless_port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$vless_server_name&fp=chrome&pbk=$vless_public_key&sid=$vless_short_id&type=tcp&headerType=none#vless-$domain"
+        # hysteria_url="hysteria://$domain:$hysteria_port?mport=45000-50000&protocol=udp&auth=$hysteria_auth_str&obfsParam=$hysteria_obfs&peer=$domain&insecure=0&upmbps=$hysteria_up_mbps&downmbps=$hysteria_down_mbps&obfs=xplus&alpn=h3#Hys-$domain"
+        hysteria_url="hysteria://$domain:$hysteria_port?protocol=udp&auth=$hysteria_auth_str&obfsParam=$hysteria_obfs&peer=$domain&insecure=0&upmbps=$hysteria_up_mbps&downmbps=$hysteria_down_mbps&obfs=xplus&alpn=h3#hy-$domain"
+        hy2_url="hy2://$hy2_password@$domain:$hy2_port?obfs=salamander&obfs-password=$hy2_obfs&sni=$domain#hy2-$domain"
 
         echo ""
         echo "==============================================="
@@ -587,6 +695,9 @@ check_result() {
         echo "hysteria节点如下："
         echo $hysteria_url
         echo ""
+        echo "hysteria2节点如下："
+        echo $hy2_url
+        echo ""
         echo "以上节点信息已保存到 $root_dir/info.txt"
         echo "Enjoy it~"
         echo "==============================================="
@@ -594,6 +705,7 @@ check_result() {
         cat >$root_dir/info.txt <<-EOF
 $vless_url
 $hysteria_url
+$hy2_url
 EOF
     else
         echo ""
@@ -630,6 +742,11 @@ hysteria_up_mbps=""
 hysteria_down_mbps=""
 hysteria_obfs=""
 hysteria_auth_str=""
+
+hy2_port=""
+hy2_obfs=""
+hy2_password=""
+hy2_masquerade=""
 
 outbound="direct"
 warp_private_key=""
@@ -678,6 +795,22 @@ while [ $# -ne 0 ]; do
         shift
         hysteria_auth_str="$1"
         ;;
+    --hy2_port)
+        shift
+        hy2_port="$1"
+        ;;
+    --hy2_obfs)
+        shift
+        hy2_obfs="$1"
+        ;;
+    --hy2_password)
+        shift
+        hy2_password="$1"
+        ;;
+    --hy2_masquerade)
+        shift
+        hy2_masquerade="$1"
+        ;;
     -d | --domain | -[Dd]omain)
         shift
         domain="$1"
@@ -717,6 +850,7 @@ main() {
 
     get_config_from_user
     generate_config
+    get_warp_config
 
     generate_file
 
