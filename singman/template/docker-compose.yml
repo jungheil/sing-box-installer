@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  sing-box:
+    # image: ghcr.io/sagernet/sing-box
+    image: accors/sing-box:v1.8.0-beta.4
+    container_name: xi-sing-box
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - ./data:/data
+      - ./tls:/tls
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    entrypoint: ["/bin/bash", "/data/entry.sh"]

@@ -1,0 +1,116 @@
+{
+  "log": {
+    "disabled": false,
+    "level": "info",
+    "output": "/data/sing-box.log",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "google",
+        "address": "tls://8.8.8.8",
+        "strategy": "prefer_ipv4"
+      },
+      { "tag": "block", "address": "rcode://success" }
+    ],
+    "rules": [
+      {
+        "rule_set": ["geosite-cn"],
+        "server": "google",
+        "disable_cache": false,
+        "rewrite_ttl": 100
+      },
+      {
+        "rule_set": ["geosite-category-ads-all"],
+        "server": "block",
+        "disable_cache": false,
+        "rewrite_ttl": 100
+      }
+    ],
+    "final": "google",
+    "strategy": "prefer_ipv4",
+    "disable_cache": false,
+    "disable_expire": false,
+    "independent_cache": false,
+    "reverse_mapping": false,
+    "fakeip": {}
+  },
+  "route": {
+    "rules": [
+      { "outbound": "dns-out", "protocol": "dns" },
+      { "outbound": "direct", "ip_is_private": true },
+      { "outbound": "block", "rule_set": ["geoip-cn", "geosite-cn"] },
+      { "outbound": "block", "rule_set": ["geosite-category-ads-all"] },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "geosite-openai",
+          "geosite-disney",
+          "geoip-netflix",
+          "geosite-netflix"
+        ]
+      }
+    ],
+    "rule_set": [
+      {
+        "tag": "geoip-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-category-ads-all",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-openai",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/openai.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-disney",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/disney.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geoip-netflix",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-netflix",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/netflix.srs",
+        "download_detour": "direct"
+      }
+    ],
+    "final": "direct",
+    "auto_detect_interface": true
+  },
+  "experimental": { "cache_file": { "enabled": true, "store_fakeip": true } },
+  "inbounds": [],
+  "outbounds": [
+    { "type": "direct", "tag": "direct" },
+    { "type": "block", "tag": "block" },
+    { "type": "dns", "tag": "dns-out" }
+  ]
+}
