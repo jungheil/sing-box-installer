@@ -7,67 +7,80 @@
  */
 
 const CLIENTCONFIG = {
-  log: { level: "debug", timestamp: true },
+  log: { level: "info", timestamp: true },
   experimental: {
     clash_api: {
       external_controller: "127.0.0.1:9090",
       external_ui: "ui",
-      secret: "",
+      secret: "admin",
+      external_ui_download_detour: "direct",
       default_mode: "rule",
     },
-    cache_file: { enabled: true, store_fakeip: false },
+    cache_file: { enabled: true },
   },
   dns: {
     servers: [
       {
-        tag: "proxyDns",
-        address: "https://8.8.8.8/dns-query",
-        detour: "proxy",
+        address: "https://dns.google/dns-query",
+        address_resolver: "dns-direct",
+        address_strategy: "prefer_ipv4",
+        tag: "dns-remote",
+        client_subnet: "1.2.10.0",
       },
       {
-        tag: "localDns",
-        address: "https://223.5.5.5/dns-query",
+        address: "https://dns.alidns.com/dns-query",
+        address_resolver: "dns-local",
+        address_strategy: "prefer_ipv4",
         detour: "direct",
+        tag: "dns-direct",
       },
-      { tag: "block", address: "rcode://success" },
+      { address: "rcode://name_error", tag: "dns-block" },
+      {
+        address: "223.5.5.5",
+        detour: "direct",
+        tag: "dns-local",
+      },
     ],
     rules: [
-      { outbound: "any", server: "localDns", disable_cache: true },
-      { clash_mode: "direct", server: "localDns" },
-      { clash_mode: "global", server: "proxyDns" },
+      { outbound: "any", server: "dns-direct" },
+      { clash_mode: "direct", server: "dns-direct" },
+      { clash_mode: "global", server: "dns-remote" },
       {
         type: "logical",
         mode: "and",
         rules: [
-          {
-            rule_set: "geosite-geolocation-!cn",
-            invert: true,
-          },
-          {
-            rule_set: ["geosite-cn", "geosite-category-companies@cn"],
-          },
+          { rule_set: "geosite-geolocation-!cn", invert: true },
+          { rule_set: ["geosite-cn", "geosite-category-companies@cn"] },
         ],
-        server: "localDns",
+        server: "dns-direct",
       },
       {
         domain: ["ghproxy.com", "cdn.jsdelivr.net", "testingcf.jsdelivr.net"],
-        server: "localDns",
+        server: "dns-direct",
       },
-      { rule_set: "geosite-category-ads-all", server: "block" },
-      { rule_set: "geosite-geolocation-!cn", server: "proxyDns" },
+      { rule_set: "geosite-category-ads-all", server: "dns-block" },
+      { rule_set: "geosite-geolocation-!cn", server: "dns-remote" },
+      { query_type: [32, 33], server: "dns-block" },
+      { domain_suffix: ".lan", server: "dns-block" },
     ],
-    strategy: "prefer_ipv4",
+    disable_cache: false,
+    disable_expire: false,
+    independent_cache: false,
+    final: "dns-remote",
   },
   inbounds: [
     {
       type: "tun",
-      inet4_address: "172.19.0.1/30",
-      inet6_address: "fdfe:dcba:9876::1/126",
-      inet6_route_exclude_address: ["fc00::/7"],
+      tag: "tun-in",
+      address: ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
+      domain_strategy: "prefer_ipv4",
+      route_exclude_address: ["192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8", "fc00::/7"],
       mtu: 9000,
+      gso: true,
       auto_route: true,
       strict_route: true,
       sniff: true,
+      sniff_override_destination: true,
       endpoint_independent_nat: false,
       stack: "system",
       platform: {
@@ -80,8 +93,10 @@ const CLIENTCONFIG = {
     },
     {
       type: "mixed",
+      tag: "mixed-in",
       listen: "127.0.0.1",
       listen_port: 2080,
+      domain_strategy: "prefer_ipv4",
       sniff: true,
       users: [],
     },
@@ -89,17 +104,22 @@ const CLIENTCONFIG = {
   outbounds: [
     { tag: "proxy", type: "selector", outbounds: ["auto", "direct"] },
     {
+      tag: "🇬 Google",
+      type: "selector",
+      outbounds: ["proxy", "direct"],
+    },
+    {
       tag: "🤖 OpenAI",
       type: "selector",
       outbounds: ["proxy", "direct"],
     },
     {
-      tag: "🌌 Google",
+      tag: "🐈‍⬛ Github",
       type: "selector",
       outbounds: ["proxy", "direct"],
     },
     {
-      tag: "📟 Telegram",
+      tag: "🛩️ Telegram",
       type: "selector",
       outbounds: ["proxy", "direct"],
     },
@@ -109,34 +129,39 @@ const CLIENTCONFIG = {
       outbounds: ["proxy", "direct"],
     },
     {
-      tag: "👤 Facebook",
+      tag: "🇫 Facebook",
       type: "selector",
       outbounds: ["proxy", "direct"],
     },
     {
-      tag: "🧩 Microsoft",
+      tag: "🪟 Microsoft",
       type: "selector",
       outbounds: ["proxy", "direct"],
-    },
-    {
-      tag: "🛍️ Amazon",
-      type: "selector",
-      outbounds: ["direct", "proxy"],
     },
     { tag: "🍎 Apple", type: "selector", outbounds: ["direct", "proxy"] },
+    {
+      tag: "⛅ Cloudflare",
+      type: "selector",
+      outbounds: ["proxy", "direct"],
+    },
+    { tag: "🎮 Game", type: "selector", outbounds: ["direct", "proxy"] },
+    {
+      tag: "🎬 MediaVideo",
+      type: "selector",
+      outbounds: ["proxy", "direct"],
+    },
     {
       tag: "📺 Bilibili",
       type: "selector",
       outbounds: ["direct", "proxy"],
     },
     {
-      tag: "🎬 MediaVideo",
+      tag: "🛍️ Amazon",
       type: "selector",
-      outbounds: ["proxy", "direct"],
+      outbounds: ["direct", "proxy"],
     },
-    { tag: "🎮 Game", type: "selector", outbounds: ["direct", "proxy"] },
     { tag: "🌏 !cn", type: "selector", outbounds: ["proxy", "direct"] },
-    { tag: "🌏 cn", type: "selector", outbounds: ["direct", "proxy"] },
+    { tag: "🇨🇳 cn", type: "selector", outbounds: ["direct", "proxy"] },
     {
       tag: "🛑 AdBlock",
       type: "selector",
@@ -171,8 +196,10 @@ const CLIENTCONFIG = {
         ],
         outbound: "dns-out",
       },
-      { network: "udp", port: 443, outbound: "block" },
-      { rule_set: "geosite-category-ads-all", outbound: "🛑 AdBlock" },
+      {
+        rule_set: "geosite-category-ads-all",
+        outbound: "🛑 AdBlock",
+      },
       {
         domain: [
           "mousegesturesapi.com",
@@ -187,29 +214,74 @@ const CLIENTCONFIG = {
         ],
         outbound: "🛑 AdBlock",
       },
-      { clash_mode: "direct", outbound: "direct" },
-      { clash_mode: "global", outbound: "proxy" },
-      { rule_set: "geosite-openai", outbound: "🤖 OpenAI" },
-      { rule_set: "geosite-github", outbound: "🌌 Google" },
+      {
+        clash_mode: "direct",
+        outbound: "direct",
+      },
+      {
+        clash_mode: "global",
+        outbound: "proxy",
+      },
+      {
+        rule_set: [
+          "geosite-microsoft@cn",
+          "geosite-apple@cn",
+          "geosite-category-games@cn",
+          "geosite-steam@cn",
+        ],
+        outbound: "🇨🇳 cn",
+      },
       {
         rule_set: ["geoip-google", "geosite-google", "geosite-youtube"],
-        outbound: "🌌 Google",
+        outbound: "🇬 Google",
+      },
+      {
+        domain: [
+          "googleapis.cn",
+          "gstatic.com",
+        ],
+        outbound: "🇬 Google",
+      },
+      {
+        rule_set: "geosite-openai",
+        outbound: "🤖 OpenAI",
+      },
+      {
+        rule_set: "geosite-github",
+        outbound: "🐈‍⬛ Github",
       },
       {
         rule_set: ["geoip-telegram", "geosite-telegram"],
-        outbound: "📟 Telegram",
+        outbound: "🛩️ Telegram",
       },
-      { rule_set: "geoip-twitter", outbound: "🐦 Twitter" },
-      { rule_set: "geosite-twitter", outbound: "🐦 Twitter" },
+      {
+        rule_set: "geoip-twitter",
+        outbound: "🐦 Twitter",
+      },
+      {
+        rule_set: "geosite-twitter",
+        outbound: "🐦 Twitter",
+      },
       {
         rule_set: ["geoip-facebook", "geosite-facebook", "geosite-instagram"],
-        outbound: "👤 Facebook",
+        outbound: "🇫 Facebook",
       },
-      { rule_set: "geosite-amazon", outbound: "🛍️ Amazon" },
-      { rule_set: "geosite-apple", outbound: "🍎 Apple" },
-      { rule_set: "geosite-microsoft", outbound: "🧩 Microsoft" },
-      { rule_set: "geosite-category-games", outbound: "🎮 Game" },
-      { rule_set: "geosite-bilibili", outbound: "📺 Bilibili" },
+      {
+        rule_set: "geosite-microsoft",
+        outbound: "🪟 Microsoft",
+      },
+      {
+        rule_set: "geosite-apple",
+        outbound: "🍎 Apple",
+      },
+      {
+        rule_set: "geosite-cloudflare",
+        outbound: "⛅ Cloudflare",
+      },
+      {
+        rule_set: "geosite-category-games",
+        outbound: "🎮 Game",
+      },
       {
         rule_set: [
           "geoip-netflix",
@@ -221,8 +293,85 @@ const CLIENTCONFIG = {
         ],
         outbound: "🎬 MediaVideo",
       },
-      { rule_set: "geosite-geolocation-!cn", outbound: "🌏 !cn" },
-      { ip_is_private: true, outbound: "🌏 cn" },
+      {
+        rule_set: "geosite-bilibili",
+        outbound: "📺 Bilibili",
+      },
+      {
+        rule_set: "geosite-amazon",
+        outbound: "🛍️ Amazon",
+      },
+      {
+        rule_set: "geosite-geolocation-!cn",
+        outbound: "🌏 !cn",
+      },
+      {
+        rule_set: [
+          "geoip-private",
+          "geosite-private",
+        ],
+        outbound: "direct",
+      },
+      {
+        ip_is_private: true,
+        outbound: "direct",
+      },
+      {
+        "source_ip_cidr": [
+          "10.99.99.0/24",
+        ],
+        outbound: "direct",
+      },
+      {
+        domain: [
+          "alidns.com",
+          "doh.pub",
+          "dot.pub",
+          "360.cn",
+          "onedns.net",
+        ],
+        outbound: "🇨🇳 cn",
+      },
+      {
+        ip_cidr: [
+          "223.5.5.5",
+          "223.6.6.6",
+          "2400:3200::1",
+          "2400:3200:baba::1",
+          "119.29.29.29",
+          "1.12.12.12",
+          "120.53.53.53",
+          "2402:4e00::",
+          "2402:4e00:1::",
+          "180.76.76.76",
+          "2400:da00::6666",
+          "114.114.114.114",
+          "114.114.115.115",
+          "114.114.114.119",
+          "114.114.115.119",
+          "114.114.114.110",
+          "114.114.115.110",
+          "180.184.1.1",
+          "180.184.2.2",
+          "101.226.4.6",
+          "218.30.118.6",
+          "123.125.81.6",
+          "140.207.198.6",
+          "1.2.4.8",
+          "210.2.4.8",
+          "52.80.66.66",
+          "117.50.22.22",
+          "2400:7fc0:849e:200::4",
+          "2404:c2c0:85d8:901::4",
+          "117.50.10.10",
+          "52.80.52.52",
+          "2400:7fc0:849e:200::8",
+          "2404:c2c0:85d8:901::8",
+          "117.50.60.30",
+          "52.80.60.30"
+        ],
+        outbound: "🇨🇳 cn",
+      },
       {
         type: "logical",
         mode: "and",
@@ -239,57 +388,35 @@ const CLIENTCONFIG = {
             ],
           },
         ],
-        outbound: "🌏 cn",
+        outbound: "🇨🇳 cn",
+      },
+      {
+        network: "udp",
+        outbound: "block",
+        port: [135, 137, 138, 139, 443, 5353],
+      },
+      {
+        ip_cidr: ["224.0.0.0/3", "ff00::/8"],
+        outbound: "block",
+      },
+      {
+        outbound: "block",
+        source_ip_cidr: ["224.0.0.0/3", "ff00::/8"],
       },
     ],
     rule_set: [
       {
-        tag: "geoip-google",
+        tag: "geosite-private",
         type: "remote",
         format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/google.srs",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/private.srs",
         download_detour: "direct",
       },
       {
-        tag: "geoip-telegram",
+        tag: "geoip-private",
         type: "remote",
         format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/telegram.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geoip-twitter",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/twitter.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geoip-facebook",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/facebook.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geoip-netflix",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geoip-cn",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geosite-openai",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/openai.srs",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/private.srs",
         download_detour: "direct",
       },
       {
@@ -307,10 +434,32 @@ const CLIENTCONFIG = {
         download_detour: "direct",
       },
       {
+        tag: "geoip-google",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/google.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-openai",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/openai.srs",
+        download_detour: "direct",
+      },
+      {
         tag: "geosite-github",
         type: "remote",
         format: "binary",
         url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/github.srs",
+        download_detour: "direct",
+      },
+
+      {
+        tag: "geoip-telegram",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/telegram.srs",
         download_detour: "direct",
       },
       {
@@ -318,6 +467,14 @@ const CLIENTCONFIG = {
         type: "remote",
         format: "binary",
         url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/telegram.srs",
+        download_detour: "direct",
+      },
+
+      {
+        tag: "geoip-twitter",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/twitter.srs",
         download_detour: "direct",
       },
       {
@@ -335,24 +492,17 @@ const CLIENTCONFIG = {
         download_detour: "direct",
       },
       {
+        tag: "geoip-facebook",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/facebook.srs",
+        download_detour: "direct",
+      },
+      {
         tag: "geosite-instagram",
         type: "remote",
         format: "binary",
         url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/instagram.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geosite-amazon",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/amazon.srs",
-        download_detour: "direct",
-      },
-      {
-        tag: "geosite-apple",
-        type: "remote",
-        format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple.srs",
         download_detour: "direct",
       },
       {
@@ -363,6 +513,41 @@ const CLIENTCONFIG = {
         download_detour: "direct",
       },
       {
+        tag: "geosite-microsoft@cn",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/microsoft@cn.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-onedrive",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/onedrive.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-apple",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-apple@cn",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple@cn.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-cloudflare",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cloudflare.srs",
+        download_detour: "direct",
+      },
+      {
         tag: "geosite-category-games",
         type: "remote",
         format: "binary",
@@ -370,10 +555,24 @@ const CLIENTCONFIG = {
         download_detour: "direct",
       },
       {
-        tag: "geosite-bilibili",
+        tag: "geosite-category-games@cn",
         type: "remote",
         format: "binary",
-        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/bilibili.srs",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-games@cn.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-steam",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/steam.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-steam@cn",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/steam@cn.srs",
         download_detour: "direct",
       },
       {
@@ -409,6 +608,34 @@ const CLIENTCONFIG = {
         type: "remote",
         format: "binary",
         url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/primevideo.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geoip-netflix",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-bilibili",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/bilibili.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geosite-amazon",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/amazon.srs",
+        download_detour: "direct",
+      },
+      {
+        tag: "geoip-cn",
+        type: "remote",
+        format: "binary",
+        url: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
         download_detour: "direct",
       },
       {
@@ -602,6 +829,8 @@ function getLink(conf) {
     return getVlessLink(conf);
   } else if (type == "hysteria2") {
     return getHysteria2Link(conf);
+  } else if (type == "wireguard") {
+    return getWireguard2Link(conf);
   } else return null;
 }
 
@@ -618,7 +847,7 @@ function getVlessLink(conf) {
   if (conf?.transport?.type) {
     if (conf.transport.headers) {
       if (conf.transport.headers?.Host[0]) {
-        param.push("host=" + conf.transport.headers.Host[0]);
+        param.push("host=" + conf.transport.headers.Host);
       }
       if (conf.transport.type == "http") {
         param.push("type=" + "tcp");
@@ -638,14 +867,13 @@ function getVlessLink(conf) {
         conf.transport.max_early_data
       ) {
         param.push(
-          "path=" +
+          "path=" + encodeURIComponent(
             conf.transport.path +
-            "?" +
-            "ed=" +
-            conf.transport.max_early_data
+            "?ed=" +
+            conf.transport.max_early_data)
         );
       } else {
-        param.push("path=" + conf.transport.path);
+        param.push("path=" + encodeURIComponent(conf.transport.path));
       }
     }
   }
@@ -657,7 +885,8 @@ function getVlessLink(conf) {
     if (conf.tls.alpn) {
       param.push("alpn=" + conf.tls.alpn);
     }
-    if (conf.tls.reality.enabled) {
+    if (conf.tls.reality?.enabled) {
+      param[param.indexOf("security=tls")] = "security=reality";
       param.push("pbk=" + conf.tls.reality.public_key);
       param.push("sid=" + conf.tls.reality.short_id);
     }
@@ -690,6 +919,30 @@ function getHysteria2Link(conf) {
     param.push("sni=" + conf.tls.server_name);
   }
   let link = `hysteria2://${auth}@${hostname}:${port}?${param.join(
+    "&"
+  )}#${tag}`;
+  return link;
+}
+
+function getWireguard2Link(conf) {
+  let tag = conf.tag;
+  let private_key = encodeURIComponent(conf.private_key);
+  let server = getServerName(conf.server);
+  let port = conf.server_port;
+  let param = [];
+  if (conf.peer_public_key) {
+    param.push("publickey=" + encodeURIComponent(conf.peer_public_key));
+  }
+  if (conf.reserved) {
+    param.push("reserved=" + conf.reserved.join(","));
+  }
+  if (conf.local_address) {
+    param.push("address=" + encodeURIComponent(conf.local_address.join(",")));
+  }
+  if (conf.mtu) {
+    param.push("mtu=" + conf.mtu);
+  }
+  let link = `wireguard://${private_key}@${server}:${port}?${param.join(
     "&"
   )}#${tag}`;
   return link;

@@ -1,0 +1,55 @@
+{
+  "log": {
+    "disabled": false,
+    "level": "info",
+    "output": "/data/sing-box.log",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "google",
+        "address": "tls://8.8.8.8",
+        "detour": "warp-out"
+      }
+    ],
+    "final": "google",
+    "disable_cache": false,
+    "disable_expire": false,
+    "independent_cache": false,
+    "reverse_mapping": false
+  },
+  "route": {
+    "rules": [{ "outbound": "dns-out", "protocol": "dns" }],
+    "final": "warp-out",
+    "auto_detect_interface": true
+  },
+  "experimental": { "cache_file": { "enabled": true, "store_fakeip": true } },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "0.0.0.0",
+      "listen_port": 11080,
+      "udp_timeout": 300,
+      "users": []
+    }
+  ],
+  "outbounds": [
+    { "type": "dns", "tag": "dns-out" },
+    {
+      "type": "wireguard",
+      "tag": "warp-out",
+      "server": "engage.cloudflareclient.com",
+      "server_port": 2408,
+      "local_address": [
+        "172.16.0.2/32",
+        "2606:4700:110:87c0:deb7:d894:3ff5:55d/128"
+      ],
+      "private_key": "eFUw4RjMVAYvsMJMoBSoYthsl8BB8faysffhV+ZK7G0=",
+      "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+      "reserved": "eC1V",
+      "mtu": 1280
+    }
+  ]
+}

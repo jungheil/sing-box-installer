@@ -34,7 +34,6 @@
     "disable_expire": false,
     "independent_cache": false,
     "reverse_mapping": false,
-    "fakeip": {}
   },
   "route": {
     "rules": [
@@ -106,7 +105,7 @@
     "final": "direct",
     "auto_detect_interface": true
   },
-  "experimental": { "cache_file": { "enabled": true, "store_fakeip": true } },
+  "experimental": { "cache_file": { "enabled": true } },
   "inbounds": [],
   "outbounds": [
     { "type": "direct", "tag": "direct" },

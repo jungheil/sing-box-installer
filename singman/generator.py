@@ -163,7 +163,7 @@ def vless_reality_brutal_generator(
         multiplex=MultiplexConfig(
             enabled=True,
             protocol="h2mux",
-            max_connections=4,
+            max_connections=1,
             min_streams=4,
             padding=True,
             brutal=MultiplexConfig.TCPBrutalConfig(
